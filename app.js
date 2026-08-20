@@ -1,6 +1,6 @@
 /**
  * 30 BEFORE 30 — HARSHIT EDITION
- * Application Logic, Real-Time Countdown & Accordion Interactions
+ * Application Logic, Interactive Travel & Adventure Map, Real-Time Progress & Accordion Interactions
  */
 
 // DOB & Milestone Configuration
@@ -17,8 +17,16 @@ let appState = {
   openedAccordions: {},
   activeCategory: 'all',
   activeStatus: 'all',
-  searchQuery: ''
+  searchQuery: '',
+  viewMode: 'list', // 'list' | 'map' | 'split'
+  mapCategoryFilter: 'all',
+  showMapRoutes: true
 };
+
+// Map Global Instances
+let leafletMap = null;
+let mapMarkers = [];
+let mapRouteLayers = [];
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
@@ -27,6 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
   updateProgressMetrics();
   initEventListeners();
   initConfetti();
+  initAdventureMap();
+  updateMapStats();
 });
 
 /* -------------------------------------------------------------
@@ -53,6 +63,52 @@ function saveState() {
     }));
   } catch (err) {
     console.error('Error saving state:', err);
+  }
+}
+
+/* -------------------------------------------------------------
+   VIEW MODE SWITCHER (List / Map / Split)
+-------------------------------------------------------------- */
+function switchMainView(viewMode) {
+  appState.viewMode = viewMode;
+
+  const tabBtns = document.querySelectorAll('.view-tab-btn');
+  tabBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-view') === viewMode);
+  });
+
+  const mapSection = document.getElementById('travel-map-section');
+  const toolbar = document.getElementById('roadmap-toolbar');
+  const accordionsContainer = document.getElementById('accordions-container');
+  const container = document.querySelector('.container');
+
+  if (container) {
+    container.classList.toggle('split-layout-active', viewMode === 'split');
+  }
+
+  if (viewMode === 'list') {
+    if (mapSection) mapSection.style.display = 'none';
+    if (toolbar) toolbar.style.display = 'block';
+    if (accordionsContainer) accordionsContainer.style.display = 'block';
+  } else if (viewMode === 'map') {
+    if (mapSection) mapSection.style.display = 'block';
+    if (toolbar) toolbar.style.display = 'none';
+    if (accordionsContainer) accordionsContainer.style.display = 'none';
+    
+    // Ensure map refreshes layout correctly
+    setTimeout(() => {
+      if (!leafletMap) initAdventureMap();
+      if (leafletMap) leafletMap.invalidateSize();
+    }, 50);
+  } else if (viewMode === 'split') {
+    if (mapSection) mapSection.style.display = 'block';
+    if (toolbar) toolbar.style.display = 'block';
+    if (accordionsContainer) accordionsContainer.style.display = 'block';
+    
+    setTimeout(() => {
+      if (!leafletMap) initAdventureMap();
+      if (leafletMap) leafletMap.invalidateSize();
+    }, 50);
   }
 }
 
@@ -156,9 +212,20 @@ function buildGoalAccordion(goal, cat) {
   itemEl.className = `accordion-item ${isOpen ? 'open' : ''} ${isCompleted ? 'is-complete' : ''}`;
   itemEl.id = `accordion-${goal.id}`;
 
-  // Locations chips HTML
+  // Match mapped destinations from database
+  const goalMapSpots = (typeof LOCATIONS_DATA !== 'undefined') ? LOCATIONS_DATA.filter(l => l.goalId === goal.id) : [];
+
+  // Locations chips HTML with interactive map click
   let locChipsHtml = '';
-  if (goal.locations && goal.locations.length > 0) {
+  if (goalMapSpots.length > 0) {
+    locChipsHtml = goalMapSpots.map(spot => `
+      <button type="button" class="chip chip-loc" onclick="event.stopPropagation(); focusLocationOnMap('${spot.id}')" title="Click to view ${spot.name} (${spot.state}) on Interactive Map">
+        <span class="chip-pin">📍</span>
+        <span class="chip-loc-name">${spot.name}</span>
+        <span class="chip-loc-action">🗺️ Map</span>
+      </button>
+    `).join('');
+  } else if (goal.locations && goal.locations.length > 0) {
     locChipsHtml = goal.locations.map(loc => `<span class="chip chip-loc">📍 ${loc}</span>`).join('');
   }
 
@@ -211,6 +278,11 @@ function buildGoalAccordion(goal, cat) {
           <div class="goal-banner-wrap">
             <img src="${goal.image}" alt="${goal.title}" class="goal-banner-img" loading="lazy">
             <div class="goal-banner-overlay"></div>
+            ${goalMapSpots.length > 0 ? `
+              <button type="button" class="banner-map-badge-btn" onclick="event.stopPropagation(); focusGoalOnMap('${goal.id}')">
+                <span>🗺️ ${goalMapSpots.length} Pinned Spot${goalMapSpots.length > 1 ? 's' : ''}</span>
+              </button>
+            ` : ''}
           </div>
         ` : ''}
 
@@ -244,9 +316,17 @@ function buildGoalAccordion(goal, cat) {
               <input type="date" id="date-${goal.id}" value="${savedDate}" onchange="saveGoalDate('${goal.id}', this.value)">
             </div>
             
-            <button type="button" class="btn ${isCompleted ? '' : 'btn-primary'}" style="font-size: 0.78rem; padding: 0.45rem 0.85rem;" onclick="toggleWholeGoal('${goal.id}')">
-              ${isCompleted ? '↩ Mark Incomplete' : '✓ Mark All Sub-tasks Complete'}
-            </button>
+            <div class="accordion-btn-group">
+              ${goalMapSpots.length > 0 ? `
+                <button type="button" class="btn btn-map-quick" onclick="focusGoalOnMap('${goal.id}')" title="Explore spots on Adventure Map">
+                  <span>🗺️ View on Map</span>
+                </button>
+              ` : ''}
+              
+              <button type="button" class="btn ${isCompleted ? '' : 'btn-primary'}" style="font-size: 0.78rem; padding: 0.45rem 0.85rem;" onclick="toggleWholeGoal('${goal.id}')">
+                ${isCompleted ? '↩ Mark Incomplete' : '✓ Mark All Sub-tasks Complete'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -299,6 +379,8 @@ function toggleItemCheck(goalId, itemId, isChecked) {
   saveState();
   updateGoalVisuals(goalId);
   updateProgressMetrics();
+  updateMapMarkersState();
+  updateMapStats();
 
   // Check if this action completed the entire goal
   const goal = findGoalById(goalId);
@@ -325,6 +407,8 @@ function toggleWholeGoal(goalId) {
   saveState();
   renderAccordions();
   updateProgressMetrics();
+  updateMapMarkersState();
+  updateMapStats();
 
   if (!isCurrentlyComplete) {
     triggerMassiveConfetti();
@@ -448,6 +532,317 @@ function updateProgressMetrics() {
 }
 
 /* -------------------------------------------------------------
+   INTERACTIVE TRAVEL & ADVENTURE MAP ENGINE (Leaflet.js)
+-------------------------------------------------------------- */
+function initAdventureMap() {
+  const mapEl = document.getElementById('adventure-leaflet-map');
+  if (!mapEl || typeof L === 'undefined') return;
+
+  if (leafletMap) {
+    leafletMap.invalidateSize();
+    return;
+  }
+
+  // Initialize Leaflet Map centered on India & surrounding world
+  leafletMap = L.map('adventure-leaflet-map', {
+    center: [22.5, 78.9],
+    zoom: 5,
+    minZoom: 2,
+    maxZoom: 18,
+    zoomControl: true,
+    scrollWheelZoom: true
+  });
+
+  // Dark Theme CartoDB Tile Layer
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 19
+  }).addTo(leafletMap);
+
+  renderMapMarkers();
+  renderMapRoutes();
+  updateMapStats();
+}
+
+function createCustomMarkerIcon(loc, isGoalDone) {
+  const categoryClass = isGoalDone ? 'pin-done' : `pin-${loc.category}`;
+  const pulseClass = isGoalDone ? 'marker-pulse pulse-done' : 'marker-pulse';
+  
+  return L.divIcon({
+    className: 'custom-leaflet-marker-wrap',
+    html: `
+      <div class="map-marker-pin ${categoryClass}" title="${loc.name} (${loc.state})">
+        <span class="marker-emoji">${loc.icon || '📍'}</span>
+        ${isGoalDone ? '<span class="marker-done-tick">✓</span>' : ''}
+        <div class="${pulseClass}"></div>
+      </div>
+    `,
+    iconSize: [36, 36],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -36]
+  });
+}
+
+function buildPopupContent(loc) {
+  const goal = findGoalById(loc.goalId);
+  const isGoalDone = goal ? isAllGoalItemsComplete(goal) : false;
+  const doneTasks = goal ? goal.items.filter(it => appState.completedItems[it.id]).length : 0;
+  const totalTasks = goal ? goal.items.length : 0;
+
+  return `
+    <div class="map-popup-card">
+      ${goal && goal.image ? `
+        <div class="map-popup-img-wrap">
+          <img src="${goal.image}" alt="${loc.name}" class="map-popup-img" loading="lazy" />
+          <span class="map-popup-tag">${loc.categoryLabel}</span>
+        </div>
+      ` : ''}
+      <div class="map-popup-body">
+        <div class="map-popup-header">
+          <span class="map-popup-goal-num">Goal #${loc.goalNum}</span>
+          <span class="map-popup-status ${isGoalDone ? 'status-done' : 'status-pending'}">
+            ${isGoalDone ? '✓ COMPLETED' : `${doneTasks}/${totalTasks} Tasks Done`}
+          </span>
+        </div>
+        <h4 class="map-popup-title">${loc.name}</h4>
+        <div class="map-popup-state">📍 ${loc.state}</div>
+        <p class="map-popup-desc">${loc.desc}</p>
+        <div class="map-popup-highlight">
+          <strong>⚡ Highlight:</strong> ${loc.highlight}
+        </div>
+        <div class="map-popup-actions">
+          <button type="button" class="btn btn-primary btn-sm" onclick="jumpToGoalFromMap('${loc.goalId}')">
+            🎯 View Goal #${loc.goalNum} in Roadmap
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMapMarkers() {
+  if (!leafletMap || typeof LOCATIONS_DATA === 'undefined') return;
+
+  // Clear existing markers
+  mapMarkers.forEach(m => leafletMap.removeLayer(m.marker));
+  mapMarkers = [];
+
+  LOCATIONS_DATA.forEach(loc => {
+    const goal = findGoalById(loc.goalId);
+    const isGoalDone = goal ? isAllGoalItemsComplete(goal) : false;
+
+    const icon = createCustomMarkerIcon(loc, isGoalDone);
+    const marker = L.marker(loc.coords, { icon: icon });
+
+    marker.bindPopup(buildPopupContent(loc), {
+      maxWidth: 320,
+      className: 'custom-leaflet-popup'
+    });
+
+    marker.addTo(leafletMap);
+    mapMarkers.push({ marker, data: loc });
+  });
+}
+
+function updateMapMarkersState() {
+  if (!leafletMap || mapMarkers.length === 0) return;
+
+  mapMarkers.forEach(item => {
+    const goal = findGoalById(item.data.goalId);
+    const isGoalDone = goal ? isAllGoalItemsComplete(goal) : false;
+    
+    // Update marker icon
+    const newIcon = createCustomMarkerIcon(item.data, isGoalDone);
+    item.marker.setIcon(newIcon);
+
+    // Update popup content
+    item.marker.setPopupContent(buildPopupContent(item.data));
+  });
+}
+
+function renderMapRoutes() {
+  if (!leafletMap || typeof ROUTES_DATA === 'undefined') return;
+
+  // Clear existing routes
+  mapRouteLayers.forEach(r => leafletMap.removeLayer(r));
+  mapRouteLayers = [];
+
+  if (!appState.showMapRoutes) return;
+
+  ROUTES_DATA.forEach(route => {
+    const polyline = L.polyline(route.waypoints, {
+      color: route.color,
+      weight: 4,
+      opacity: 0.85,
+      dashArray: '8, 8',
+      lineCap: 'round',
+      lineJoin: 'round',
+      className: 'epic-route-polyline'
+    });
+
+    polyline.bindPopup(`
+      <div class="map-popup-card">
+        <div class="map-popup-body">
+          <div class="map-popup-header">
+            <span class="map-popup-goal-num">Route #${route.goalNum}</span>
+            <span class="map-popup-status" style="background: rgba(99, 102, 241, 0.2); color: #818cf8;">🚗 Epic Expedition</span>
+          </div>
+          <h4 class="map-popup-title" style="color: ${route.color};">${route.name}</h4>
+          <div class="map-popup-state">${route.routeSubtitle}</div>
+          <p class="map-popup-desc">${route.desc}</p>
+          <div class="map-popup-actions">
+            <button type="button" class="btn btn-primary btn-sm" onclick="jumpToGoalFromMap('${route.goalId}')">
+              🎯 View Goal #${route.goalNum} in Roadmap
+            </button>
+          </div>
+        </div>
+      </div>
+    `, {
+      maxWidth: 320,
+      className: 'custom-leaflet-popup'
+    });
+
+    polyline.addTo(leafletMap);
+    mapRouteLayers.push(polyline);
+  });
+}
+
+function zoomMapToRegion(regionKey) {
+  if (!leafletMap) initAdventureMap();
+  
+  document.querySelectorAll('.map-region-btn').forEach(btn => btn.classList.remove('active'));
+  const activeBtn = document.querySelector(`.map-region-btn[onclick*="${regionKey}"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+
+  switch (regionKey) {
+    case 'india':
+      leafletMap.flyTo([22.5, 78.9], 5, { duration: 1 });
+      break;
+    case 'himalayas':
+      leafletMap.flyTo([32.2, 77.5], 7, { duration: 1 });
+      break;
+    case 'coastal':
+      leafletMap.flyTo([13.5, 75.0], 6, { duration: 1 });
+      break;
+    case 'rajasthan':
+      leafletMap.flyTo([26.5, 73.5], 7, { duration: 1 });
+      break;
+    case 'global':
+      leafletMap.flyTo([25.0, 50.0], 3, { duration: 1.2 });
+      break;
+  }
+}
+
+function filterMapMarkers(catFilter) {
+  appState.mapCategoryFilter = catFilter;
+
+  if (!leafletMap || mapMarkers.length === 0) return;
+
+  mapMarkers.forEach(item => {
+    const shouldShow = (catFilter === 'all') || (item.data.category === catFilter);
+    if (shouldShow) {
+      if (!leafletMap.hasLayer(item.marker)) {
+        leafletMap.addLayer(item.marker);
+      }
+    } else {
+      if (leafletMap.hasLayer(item.marker)) {
+        leafletMap.removeLayer(item.marker);
+      }
+    }
+  });
+
+  showToast(catFilter === 'all' ? 'Showing all destinations' : `Filtered: ${catFilter}`);
+}
+
+function toggleMapRoutes(show) {
+  appState.showMapRoutes = show;
+  renderMapRoutes();
+  showToast(show ? 'Epic routes visible' : 'Epic routes hidden');
+}
+
+function focusLocationOnMap(locId) {
+  const loc = LOCATIONS_DATA.find(l => l.id === locId);
+  if (!loc) return;
+
+  switchMainView('map');
+  
+  setTimeout(() => {
+    if (!leafletMap) initAdventureMap();
+    leafletMap.invalidateSize();
+    leafletMap.flyTo(loc.coords, 10, { duration: 1.2 });
+
+    const targetMarkerObj = mapMarkers.find(m => m.data.id === locId);
+    if (targetMarkerObj && targetMarkerObj.marker) {
+      setTimeout(() => {
+        targetMarkerObj.marker.openPopup();
+      }, 1200);
+    }
+    showToast(`Focused on ${loc.name}`);
+  }, 100);
+}
+
+function focusGoalOnMap(goalId) {
+  const spots = LOCATIONS_DATA.filter(l => l.goalId === goalId);
+  if (spots.length === 0) return;
+
+  switchMainView('map');
+
+  setTimeout(() => {
+    if (!leafletMap) initAdventureMap();
+    leafletMap.invalidateSize();
+
+    if (spots.length === 1) {
+      leafletMap.flyTo(spots[0].coords, 9, { duration: 1.2 });
+      const targetMarkerObj = mapMarkers.find(m => m.data.id === spots[0].id);
+      if (targetMarkerObj) {
+        setTimeout(() => targetMarkerObj.marker.openPopup(), 1200);
+      }
+    } else {
+      const bounds = L.latLngBounds(spots.map(s => s.coords));
+      leafletMap.fitBounds(bounds, { padding: [60, 60], maxZoom: 8, animate: true, duration: 1.2 });
+    }
+    showToast(`Showing ${spots.length} destination spots for this goal`);
+  }, 100);
+}
+
+function jumpToGoalFromMap(goalId) {
+  switchMainView('list');
+
+  setTimeout(() => {
+    const goalEl = document.getElementById(`accordion-${goalId}`);
+    if (goalEl) {
+      goalEl.classList.add('open');
+      appState.openedAccordions[goalId] = true;
+      goalEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      goalEl.classList.add('highlight-pulse');
+      setTimeout(() => goalEl.classList.remove('highlight-pulse'), 2500);
+      showToast(`Opened Goal #${goalId.replace('goal-', '')}`);
+    }
+  }, 150);
+}
+
+function updateMapStats() {
+  if (typeof LOCATIONS_DATA === 'undefined') return;
+
+  const spotsCountBadge = document.getElementById('map-spots-count-badge');
+  const visitedCountBadge = document.getElementById('map-visited-count-badge');
+  const heroMapDestinations = document.getElementById('stat-map-destinations');
+
+  let visitedCount = 0;
+  LOCATIONS_DATA.forEach(loc => {
+    const goal = findGoalById(loc.goalId);
+    if (goal && isAllGoalItemsComplete(goal)) {
+      visitedCount++;
+    }
+  });
+
+  if (spotsCountBadge) spotsCountBadge.textContent = `${LOCATIONS_DATA.length} Destinations`;
+  if (visitedCountBadge) visitedCountBadge.textContent = `${visitedCount} Explored`;
+  if (heroMapDestinations) heroMapDestinations.textContent = `${LOCATIONS_DATA.length}+`;
+}
+
+/* -------------------------------------------------------------
    FILTERS & CONTROLS
 -------------------------------------------------------------- */
 function initEventListeners() {
@@ -511,6 +906,8 @@ function resetAllData() {
     saveState();
     renderAccordions();
     updateProgressMetrics();
+    updateMapMarkersState();
+    updateMapStats();
     showToast('All progress reset to 0.');
   }
 }
@@ -631,3 +1028,5 @@ function renderConfettiLoop() {
     confettiCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   }
 }
+
+

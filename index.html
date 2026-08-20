@@ -12,6 +12,8 @@
   
   <!-- Stylesheet -->
   <link rel="stylesheet" href="style.css">
+  <!-- Leaflet CSS for Interactive Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 </head>
 <body>
   <!-- Ambient background glow elements -->
@@ -74,6 +76,11 @@
           <div class="stat-label">Sub-Tasks Done</div>
         </div>
         <div class="stat-card">
+          <div class="stat-icon">🗺️</div>
+          <div class="stat-number" id="stat-map-destinations">50+</div>
+          <div class="stat-label">Mapped Spots</div>
+        </div>
+        <div class="stat-card">
           <div class="stat-icon">⚡</div>
           <div class="stat-number" id="stat-score-percent" style="color: var(--emerald);">0%</div>
           <div class="stat-label">Overall Score</div>
@@ -81,12 +88,110 @@
       </div>
     </header>
 
+    <!-- View Mode Switcher Navigation -->
+    <div class="view-switcher-bar">
+      <button type="button" class="view-tab-btn active" data-view="list" onclick="switchMainView('list')">
+        <span class="tab-icon">📋</span>
+        <span>30 Goals Roadmap</span>
+      </button>
+      <button type="button" class="view-tab-btn" data-view="map" onclick="switchMainView('map')">
+        <span class="tab-icon">🗺️</span>
+        <span>Interactive Travel & Adventure Map</span>
+        <span class="tab-tag-badge">50+ Spots</span>
+      </button>
+      <button type="button" class="view-tab-btn" data-view="split" onclick="switchMainView('split')">
+        <span class="tab-icon">⚡</span>
+        <span>Split Roadmap + Map</span>
+      </button>
+    </div>
+
+    <!-- Interactive Adventure & Travel Map Section -->
+    <section id="travel-map-section" class="travel-map-section" style="display: none;">
+      <div class="map-card-wrapper">
+        <div class="map-card-header">
+          <div class="map-header-left">
+            <div class="map-icon-badge">🗺️</div>
+            <div>
+              <h2 class="map-title">Interactive Adventure & Travel Map</h2>
+              <p class="map-subtitle">50+ geo-tagged Himalayan peaks, dropzones, coral reefs, safaris, and epic overland road trip circuits.</p>
+            </div>
+          </div>
+          <div class="map-stats-pills">
+            <div class="map-stat-pill">
+              <span class="map-stat-pill-icon">📍</span>
+              <span id="map-spots-count-badge">54 Destinations</span>
+            </div>
+            <div class="map-stat-pill">
+              <span class="map-stat-pill-icon">🛣️</span>
+              <span>6 Epic Routes</span>
+            </div>
+            <div class="map-stat-pill highlight">
+              <span class="map-stat-pill-icon">✓</span>
+              <span id="map-visited-count-badge">0 Explored</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Map Navigation & Filter Controls -->
+        <div class="map-controls-bar">
+          <!-- Region Jump Buttons -->
+          <div class="map-control-group">
+            <span class="map-group-label">Quick Jump:</span>
+            <div class="map-quick-buttons">
+              <button type="button" class="map-region-btn active" onclick="zoomMapToRegion('india')">🇮🇳 All India</button>
+              <button type="button" class="map-region-btn" onclick="zoomMapToRegion('himalayas')">🏔️ Himalayas</button>
+              <button type="button" class="map-region-btn" onclick="zoomMapToRegion('coastal')">🌴 Coastal & South</button>
+              <button type="button" class="map-region-btn" onclick="zoomMapToRegion('rajasthan')">🏜️ Thar & Forts</button>
+              <button type="button" class="map-region-btn" onclick="zoomMapToRegion('global')">🌏 Global World</button>
+            </div>
+          </div>
+
+          <!-- Filter Marker Types & Routes -->
+          <div class="map-control-group map-right-controls">
+            <div class="map-filter-select-wrap">
+              <span class="map-group-label">Filter:</span>
+              <select id="map-category-filter" class="map-select" onchange="filterMapMarkers(this.value)">
+                <option value="all">🌐 All 50+ Spots</option>
+                <option value="mountains">🏔️ Treks & High Summits</option>
+                <option value="aerial">🪂 Skydiving & Aerial</option>
+                <option value="water">🤿 Scuba, Rafting & Surf</option>
+                <option value="safari">🐅 Safaris & Wildlife</option>
+                <option value="cities">🌍 Solo Cities & Culture</option>
+                <option value="routes">🛣️ Road Trips & Rails</option>
+                <option value="family">👨‍👩‍👦 Parents' Vacation & Squad</option>
+              </select>
+            </div>
+
+            <label class="map-checkbox-label">
+              <input type="checkbox" id="map-routes-toggle" checked onchange="toggleMapRoutes(this.checked)">
+              <span>Show Epic Routes</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Main Leaflet Map Canvas -->
+        <div class="map-canvas-wrapper">
+          <div id="adventure-leaflet-map" class="adventure-leaflet-map"></div>
+          
+          <!-- Floating Map Legend -->
+          <div class="map-legend">
+            <div class="legend-item"><span class="legend-dot dot-mountain"></span> Peak/Trek</div>
+            <div class="legend-item"><span class="legend-dot dot-air"></span> Sky/Drop</div>
+            <div class="legend-item"><span class="legend-dot dot-water"></span> Ocean/Rafting</div>
+            <div class="legend-item"><span class="legend-dot dot-safari"></span> Safari/Desert</div>
+            <div class="legend-item"><span class="legend-dot dot-city"></span> City/Culture</div>
+            <div class="legend-item"><span class="legend-dot dot-done"></span> ✓ Completed</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Interactive Controls & Toolbar -->
-    <div class="toolbar-wrap">
+    <div class="toolbar-wrap" id="roadmap-toolbar">
       <div class="toolbar-top">
         <div class="search-box">
           <span class="search-icon">🔍</span>
-          <input type="text" id="search-input" placeholder="Search goals, locations (e.g. Rishikesh, Dubai), skills, tech...">
+          <input type="text" id="search-input" placeholder="Search goals, locations (e.g. Rishikesh, Dubai, Kedarkantha), skills...">
         </div>
 
         <div class="toolbar-actions">
@@ -135,6 +240,8 @@
   </div>
 
   <!-- Scripts -->
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="data.js"></script>
   <script src="app.js"></script>
 </body>
