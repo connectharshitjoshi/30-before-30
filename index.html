@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🔥 30 Before 30 — Harshit Edition</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background glow elements -->
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <!-- Particle Confetti Canvas -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <div class="container">
+    
+    <!-- Hero Header -->
+    <header class="hero">
+      <div class="hero-badge">
+        <span>⚡ The Definitive Life Roadmap</span>
+      </div>
+      <h1 class="hero-title">30 BEFORE <span>30</span></h1>
+      <p class="hero-subtitle">
+        Harshit’s master blueprint of 30 landmark adventures, financial independence, physical courage, and crowning tech achievements before turning 30.
+      </p>
+
+      <!-- Milestone & Goals Progress Card -->
+      <div class="progress-overview-card">
+        <div class="overview-header">
+          <div class="overview-meta">
+            <h3>🏆 30 Before 30 Milestone Tracker</h3>
+            <p>Milestone Target: 28 January 2033 (30th Birthday)</p>
+          </div>
+          <div class="dob-pill">
+            DOB: <strong>28 Jan 2003</strong>
+          </div>
+        </div>
+
+        <div class="prog-item">
+          <div class="prog-meta">
+            <span class="prog-label">Overall Bucket List Progress</span>
+            <span class="prog-val" id="goals-prog-val">0% Complete (0/30 Goals)</span>
+          </div>
+          <div class="prog-bar-bg">
+            <div class="prog-bar-fill fill-goals" id="goals-prog-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Summary Ribbon -->
+      <div class="stats-ribbon">
+        <div class="stat-card">
+          <div class="stat-icon">🎯</div>
+          <div class="stat-number">30</div>
+          <div class="stat-label">Total Goals</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">✅</div>
+          <div class="stat-number" id="stat-completed-goals">0 / 30</div>
+          <div class="stat-label">Goals Done</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📋</div>
+          <div class="stat-number" id="stat-completed-tasks">0 / 0</div>
+          <div class="stat-label">Sub-Tasks Done</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⚡</div>
+          <div class="stat-number" id="stat-score-percent" style="color: var(--emerald);">0%</div>
+          <div class="stat-label">Overall Score</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Interactive Controls & Toolbar -->
+    <div class="toolbar-wrap">
+      <div class="toolbar-top">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Search goals, locations (e.g. Rishikesh, Dubai), skills, tech...">
+        </div>
+
+        <div class="toolbar-actions">
+          <select id="status-filter" class="btn" style="padding: 0.65rem 0.85rem; outline: none;">
+            <option value="all">⚡ All Statuses</option>
+            <option value="pending">⏳ In Progress / Pending</option>
+            <option value="completed">✓ Completed Only</option>
+          </select>
+
+          <button class="btn" onclick="expandAllAccordions()" title="Expand all goal cards">
+            <span>⤢ Expand All</span>
+          </button>
+          <button class="btn" onclick="collapseAllAccordions()" title="Collapse all goal cards">
+            <span>⤡ Collapse All</span>
+          </button>
+
+          <button class="btn btn-danger" onclick="resetAllData()" title="Reset All Progress">
+            <span>🔄 Reset</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Category Filter Pills -->
+      <div class="category-pills">
+        <button class="pill-btn active" data-filter="all">🌐 All 30 Goals</button>
+        <button class="pill-btn" data-filter="wealth">💰 Wealth & Ventures</button>
+        <button class="pill-btn" data-filter="adventure">🏔️ High Adventure</button>
+        <button class="pill-btn" data-filter="travel">🌍 Travel & Culture</button>
+        <button class="pill-btn" data-filter="family">👨‍👩‍👦 Family & Gratitude</button>
+        <button class="pill-btn" data-filter="growth">🧠 Growth & Mindset</button>
+        <button class="pill-btn" data-filter="tech">💻 Tech & Magnum Opus</button>
+      </div>
+    </div>
+
+    <!-- Main Accordions Container -->
+    <main id="accordions-container">
+      <!-- Dynamic Category Sections and Accordion Items loaded via data.js & app.js -->
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>🔥 <strong>30 Before 30 — Harshit Edition</strong> • Target Date: <strong>28 January 2033</strong></p>
+      <p style="margin-top: 0.35rem;">Live with intention, conquer fear, build legacy, and cherish family.</p>
+    </footer>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
